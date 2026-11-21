@@ -22,6 +22,7 @@
 
     <!-- Navigation Tabs -->
     <nav class="tabs">
+
         <button class="tab-button active"
                 onclick="showTab('text-translation', this)">
             Text Translation
@@ -31,9 +32,14 @@
                 onclick="showTab('speech-translation', this)">
             Speech Translation
         </button>
+
     </nav>
 
+
+    <!-- ================================= -->
     <!-- TEXT TRANSLATION -->
+    <!-- ================================= -->
+
     <section id="text-translation" class="tab-content active">
 
         <h2>Text Translation</h2>
@@ -46,11 +52,14 @@
         <div class="language-selection">
 
             <div class="language-box">
-                <label for="text-source-language">Source Language</label>
+
+                <label for="text-source-language">
+                    Source Language
+                </label>
 
                 <select id="text-source-language">
-                    <option value="Auto" selected>Auto Detect</option>
-                    <option value="English">English</option>
+
+                    <option value="English" selected>English</option>
                     <option value="Hindi">Hindi</option>
                     <option value="Telugu">Telugu</option>
                     <option value="Tamil">Tamil</option>
@@ -60,7 +69,9 @@
                     <option value="Japanese">Japanese</option>
                     <option value="Chinese">Chinese</option>
                     <option value="Arabic">Arabic</option>
+
                 </select>
+
             </div>
 
             <button class="swap-button"
@@ -70,9 +81,13 @@
             </button>
 
             <div class="language-box">
-                <label for="text-target-language">Target Language</label>
+
+                <label for="text-target-language">
+                    Target Language
+                </label>
 
                 <select id="text-target-language">
+
                     <option value="Hindi" selected>Hindi</option>
                     <option value="English">English</option>
                     <option value="Telugu">Telugu</option>
@@ -83,10 +98,13 @@
                     <option value="Japanese">Japanese</option>
                     <option value="Chinese">Chinese</option>
                     <option value="Arabic">Arabic</option>
+
                 </select>
+
             </div>
 
         </div>
+
 
         <label for="text-input">Enter Your Text</label>
 
@@ -95,7 +113,9 @@
             placeholder="Type your text here or click Start Speaking..."
         ></textarea>
 
+
         <!-- Microphone Controls -->
+
         <div class="speech-controls">
 
             <button id="text-start-recording"
@@ -117,7 +137,9 @@
             Click Start Speaking to enter text using your voice.
         </p>
 
+
         <!-- Translation Controls -->
+
         <div class="action-buttons">
 
             <button class="btn btn-primary"
@@ -132,6 +154,7 @@
 
         </div>
 
+
         <label for="text-output">Translated Text</label>
 
         <textarea
@@ -139,6 +162,7 @@
             placeholder="Your translated text will appear here..."
             readonly
         ></textarea>
+
 
         <button class="btn btn-copy"
                 onclick="copyText()">
@@ -149,25 +173,35 @@
 
     </section>
 
+
+    <!-- ================================= -->
     <!-- SPEECH TRANSLATION -->
+    <!-- ================================= -->
+
     <section id="speech-translation" class="tab-content">
 
         <h2>Speech Translation</h2>
 
         <p class="description">
-            Record your voice or upload an audio file.
-            The AI will recognize your speech and translate it.
+            Speak into your microphone.
+            Your browser will recognize your speech and translate it
+            into your selected language.
         </p>
+
+
+        <!-- Language Selection -->
 
         <div class="language-selection">
 
             <div class="language-box">
+
                 <label for="speech-source-language">
                     Source Language
                 </label>
 
                 <select id="speech-source-language">
-                    <option value="English">English</option>
+
+                    <option value="English" selected>English</option>
                     <option value="Hindi">Hindi</option>
                     <option value="Telugu">Telugu</option>
                     <option value="Tamil">Tamil</option>
@@ -177,7 +211,9 @@
                     <option value="Japanese">Japanese</option>
                     <option value="Chinese">Chinese</option>
                     <option value="Arabic">Arabic</option>
+
                 </select>
+
             </div>
 
             <button class="swap-button"
@@ -187,11 +223,13 @@
             </button>
 
             <div class="language-box">
+
                 <label for="speech-target-language">
                     Target Language
                 </label>
 
                 <select id="speech-target-language">
+
                     <option value="Hindi" selected>Hindi</option>
                     <option value="English">English</option>
                     <option value="Telugu">Telugu</option>
@@ -202,12 +240,16 @@
                     <option value="Japanese">Japanese</option>
                     <option value="Chinese">Chinese</option>
                     <option value="Arabic">Arabic</option>
+
                 </select>
+
             </div>
 
         </div>
 
-        <!-- Audio Recording -->
+
+        <!-- Speech Recording -->
+
         <div class="audio-section">
 
             <h3>Record Your Speech</h3>
@@ -235,18 +277,8 @@
 
         </div>
 
-        <!-- Audio Upload -->
-        <div class="audio-section">
 
-            <h3>Or Upload Audio</h3>
-
-            <input
-                type="file"
-                id="speech-audio-file"
-                accept="audio/*"
-            >
-
-        </div>
+        <!-- Speech Translation Button -->
 
         <button class="btn btn-primary full-width"
                 onclick="translateSpeech()">
@@ -254,6 +286,9 @@
         </button>
 
         <p id="speech-status" class="status"></p>
+
+
+        <!-- Recognized Speech -->
 
         <label for="recognized-text">
             Recognized Speech (Source Text)
@@ -265,6 +300,9 @@
             readonly
         ></textarea>
 
+
+        <!-- Translated Speech -->
+
         <label for="speech-translated-output">
             Translated Speech
         </label>
@@ -274,6 +312,9 @@
             placeholder="Your translated speech will appear here..."
             readonly
         ></textarea>
+
+
+        <!-- Speech Actions -->
 
         <div class="action-buttons">
 
@@ -291,13 +332,19 @@
 
     </section>
 
+
+    <!-- FOOTER -->
+
     <footer>
         <p>AI Language Translator | Powered by Python and AI</p>
     </footer>
 
 </div>
 
-<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+
+<!-- JavaScript -->
+
+<script src="{{ url_for('static', filename='js/script.js') }}?v=3"></script>
 
 </body>
 </html>

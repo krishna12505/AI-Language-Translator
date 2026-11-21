@@ -1,16 +1,32 @@
 
-let textRecorder = null;
-let speechRecorder = null;
+// =====================================
+// CONFIGURATION
+// =====================================
 
-let textAudioChunks = [];
-let speechAudioChunks = [];
+const SPEECH_LANGUAGES = {
+    English: "en-US",
+    Hindi: "hi-IN",
+    Telugu: "te-IN",
+    Tamil: "ta-IN",
+    French: "fr-FR",
+    German: "de-DE",
+    Spanish: "es-ES",
+    Japanese: "ja-JP",
+    Chinese: "zh-CN",
+    Arabic: "ar-SA"
+};
 
-let recordedSpeechAudio = null;
+const SpeechRecognitionAPI =
+    window.SpeechRecognition || window.webkitSpeechRecognition;
 
-// Live transcription variables
+let textRecognition = null;
+let speechRecognition = null;
+
 let textRecordingActive = false;
-let textStream = null;
+let speechRecordingActive = false;
+
 let textTranscript = "";
+let speechTranscript = "";
 
 
 // =====================================
@@ -33,295 +49,182 @@ function showTab(tabId, button) {
 
 
 // =====================================
-// AUDIO EXTENSION
+// CREATE SPEECH RECOGNITION
 // =====================================
 
-function getAudioExtension(mimeType = "") {
+function createRecognition(language, onTranscript, onEnd, statusElement) {
 
-    if (mimeType.includes("ogg")) return "ogg";
-    if (mimeType.includes("mp4")) return "mp4";
-    if (mimeType.includes("wav")) return "wav";
+    if (!SpeechRecognitionAPI) {
+        throw new Error(
+            "Speech recognition is not supported in this browser. Please use Google Chrome."
+        );
+    }
 
-    return "webm";
-}
+    const recognition = new SpeechRecognitionAPI();
 
+    recognition.lang = SPEECH_LANGUAGES[language] || "en-US";
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
 
-// =====================================
-// SEND AUDIO TO BACKEND
-// =====================================
+    recognition.onresult = event => {
 
-async function sendAudioToBackend(audioBlob, endpoint, sourceLanguage) {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
 
-    const formData = new FormData();
+            if (event.results[i].isFinal) {
 
-    const extension = getAudioExtension(audioBlob.type);
+                const transcript = event.results[i][0].transcript.trim();
 
-    const audioFile = new File(
-        [audioBlob],
-        `recording.${extension}`,
-        {
-            type: audioBlob.type || "audio/webm"
+                if (transcript) {
+                    onTranscript(transcript);
+                }
+            }
         }
-    );
+    };
 
-    formData.append("audio", audioFile);
-    formData.append("source_language", sourceLanguage);
+    recognition.onerror = event => {
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData
-    });
+        console.error("Speech Recognition Error:", event.error);
 
-    const result = await response.json();
+        if (event.error === "not-allowed" ||
+            event.error === "service-not-allowed") {
 
-    if (!response.ok) {
-        throw new Error(result.error || "Audio processing failed.");
-    }
+            statusElement.textContent =
+                "Microphone permission denied. Please allow microphone access.";
 
-    return result;
+        } else if (event.error === "no-speech") {
+
+            statusElement.textContent =
+                "No speech detected. Please speak into your microphone.";
+
+        } else if (event.error === "network") {
+
+            statusElement.textContent =
+                "Speech recognition network error. Please check your connection.";
+
+        } else if (event.error !== "aborted") {
+
+            statusElement.textContent =
+                "Speech recognition failed: " + event.error;
+        }
+    };
+
+    recognition.onend = () => {
+        onEnd();
+    };
+
+    return recognition;
 }
 
 
 // =====================================
-// TEXT TRANSLATION - LIVE SPEECH INPUT
+// TEXT TRANSLATION - START SPEAKING
 // =====================================
 
-async function startTextRecording() {
-
-    if (!navigator.mediaDevices || !window.MediaRecorder) {
-
-        document.getElementById("text-speech-status").textContent =
-            "Your browser does not support audio recording.";
-
-        return;
-    }
+function startTextRecording() {
 
     if (textRecordingActive) return;
 
+    const sourceLanguage = document.getElementById(
+        "text-source-language"
+    ).value;
+
+    const status = document.getElementById("text-speech-status");
+
     try {
 
-        textStream = await navigator.mediaDevices.getUserMedia({
-            audio: true
-        });
-
         textTranscript = "";
-        textRecordingActive = true;
 
         document.getElementById("text-input").value = "";
 
-        document.getElementById("text-start-recording").disabled = true;
-        document.getElementById("text-stop-recording").disabled = false;
+        textRecognition = createRecognition(
+            sourceLanguage,
 
-        document.getElementById("text-speech-status").textContent =
-            "Listening... Speak now.";
+            transcript => {
 
-        recordNextTextChunk();
+                textTranscript +=
+                    (textTranscript ? " " : "") + transcript;
+
+                document.getElementById("text-input").value =
+                    textTranscript;
+
+                status.textContent = "Listening...";
+
+            },
+
+            () => {
+
+                textRecordingActive = false;
+
+                document.getElementById(
+                    "text-start-recording"
+                ).disabled = false;
+
+                document.getElementById(
+                    "text-stop-recording"
+                ).disabled = true;
+
+                if (textTranscript) {
+                    status.textContent =
+                        "Speech converted successfully! You can now click Translate.";
+                } else if (status.textContent === "Listening...") {
+                    status.textContent = "No speech detected. Please try again.";
+                }
+
+                textRecognition = null;
+            },
+
+            status
+        );
+
+        textRecordingActive = true;
+
+        document.getElementById(
+            "text-start-recording"
+        ).disabled = true;
+
+        document.getElementById(
+            "text-stop-recording"
+        ).disabled = false;
+
+        status.textContent = "Listening... Speak now.";
+
+        textRecognition.start();
 
     } catch (error) {
 
-        console.error("Microphone Error:", error);
-
         textRecordingActive = false;
 
-        if (textStream) {
-            textStream.getTracks().forEach(track => track.stop());
-            textStream = null;
-        }
+        status.textContent = error.message;
 
-        document.getElementById("text-speech-status").textContent =
-            "Microphone access denied or unavailable.";
+        document.getElementById(
+            "text-start-recording"
+        ).disabled = false;
 
-        document.getElementById("text-start-recording").disabled = false;
-        document.getElementById("text-stop-recording").disabled = true;
+        document.getElementById(
+            "text-stop-recording"
+        ).disabled = true;
     }
 }
 
 
 // =====================================
-// RECORD AND PROCESS LIVE AUDIO CHUNKS
-// =====================================
-
-function recordNextTextChunk() {
-
-    if (!textRecordingActive || !textStream) return;
-
-    textAudioChunks = [];
-
-    const currentRecorder = new MediaRecorder(textStream);
-
-    textRecorder = currentRecorder;
-
-    currentRecorder.ondataavailable = event => {
-
-        if (event.data.size > 0) {
-            textAudioChunks.push(event.data);
-        }
-
-    };
-
-    currentRecorder.onstop = async () => {
-
-        const audioBlob = new Blob(textAudioChunks, {
-            type: currentRecorder.mimeType
-        });
-
-        try {
-
-            if (audioBlob.size > 0) {
-
-                document.getElementById("text-speech-status").textContent =
-                    "Whisper is recognizing your speech...";
-
-                // Automatically detect the spoken language
-                const sourceLanguage = "Auto";
-
-                const result = await sendAudioToBackend(
-                    audioBlob,
-                    "/api/speech-to-text",
-                    sourceLanguage
-                );
-
-                // Automatically update the source-language dropdown
-                if (result.detected_language) {
-
-                    const sourceDropdown = document.getElementById(
-                        "text-source-language"
-                    );
-
-                    const detectedLanguage = result.detected_language;
-
-                    const languageExists = Array.from(
-                        sourceDropdown.options
-                    ).some(option => option.value === detectedLanguage);
-
-                    if (languageExists) {
-                        sourceDropdown.value = detectedLanguage;
-                    } else {
-                        console.warn(
-                            "Detected language is not available in the dropdown:",
-                            detectedLanguage
-                        );
-                    }
-
-                }
-
-                // Add recognized speech to the text input
-                if (result.recognized_text) {
-
-                    const newText = result.recognized_text.trim();
-
-                    if (newText) {
-
-                        textTranscript +=
-                            (textTranscript ? " " : "") + newText;
-
-                        document.getElementById("text-input").value =
-                            textTranscript;
-
-                    }
-
-                }
-
-                document.getElementById("text-speech-status").textContent =
-                    "Listening... Speak now.";
-
-            }
-
-        } catch (error) {
-
-            console.error("Live Transcription Error:", error);
-
-            document.getElementById("text-speech-status").textContent =
-                error.message;
-
-        } finally {
-
-            // Continue recording after processing the previous chunk
-            if (textRecordingActive) {
-
-                recordNextTextChunk();
-
-            } else {
-
-                finishTextRecording();
-
-            }
-
-        }
-
-    };
-
-    currentRecorder.start();
-
-    // Capture approximately 3 seconds of audio
-    setTimeout(() => {
-
-        if (
-            textRecordingActive &&
-            currentRecorder.state === "recording"
-        ) {
-
-            currentRecorder.stop();
-
-        }
-
-    }, 3000);
-
-}
-
-
-// =====================================
-// FINISH TEXT RECORDING
-// =====================================
-
-function finishTextRecording() {
-
-    if (textStream) {
-
-        textStream.getTracks().forEach(track => track.stop());
-
-        textStream = null;
-
-    }
-
-    textRecorder = null;
-
-    document.getElementById("text-start-recording").disabled = false;
-    document.getElementById("text-stop-recording").disabled = true;
-
-    document.getElementById("text-speech-status").textContent =
-        textTranscript
-            ? "Speech converted successfully! You can now click Translate."
-            : "No speech detected. Please try again.";
-
-}
-
-
-// =====================================
-// STOP TEXT RECORDING
+// TEXT TRANSLATION - STOP SPEAKING
 // =====================================
 
 function stopTextRecording() {
 
-    if (!textRecordingActive) return;
+    if (!textRecognition || !textRecordingActive) return;
 
-    textRecordingActive = false;
+    document.getElementById(
+        "text-stop-recording"
+    ).disabled = true;
 
-    document.getElementById("text-stop-recording").disabled = true;
+    document.getElementById(
+        "text-speech-status"
+    ).textContent = "Processing your speech...";
 
-    document.getElementById("text-speech-status").textContent =
-        "Stopping recording and processing final audio...";
-
-    if (textRecorder && textRecorder.state === "recording") {
-
-        textRecorder.stop();
-
-    } else if (!textRecorder && textStream) {
-
-        finishTextRecording();
-
-    }
-
+    textRecognition.stop();
 }
 
 
@@ -345,21 +248,16 @@ async function translateText() {
     const status = document.getElementById("text-status");
 
     if (!inputText) {
-
         status.textContent = "Please enter or speak some text.";
-
         return;
     }
 
     if (sourceLanguage === targetLanguage) {
-
         status.textContent = "Please select two different languages.";
-
         return;
     }
 
     status.textContent = "Translating... Please wait.";
-
     output.value = "";
 
     try {
@@ -392,10 +290,9 @@ async function translateText() {
 
     } catch (error) {
 
+        console.error("Translation Error:", error);
         status.textContent = error.message;
-
     }
-
 }
 
 
@@ -412,7 +309,6 @@ function swapTextLanguages() {
 
     source.value = target.value;
     target.value = temp;
-
 }
 
 
@@ -435,7 +331,6 @@ function clearText() {
 
     document.getElementById("text-speech-status").textContent =
         "Click Start Speaking to enter text using your voice.";
-
 }
 
 
@@ -446,12 +341,10 @@ function clearText() {
 async function copyText() {
 
     const output = document.getElementById("text-output");
+    const status = document.getElementById("text-status");
 
     if (!output.value.trim()) {
-
-        document.getElementById("text-status").textContent =
-            "There is no translation to copy.";
-
+        status.textContent = "There is no translation to copy.";
         return;
     }
 
@@ -459,16 +352,12 @@ async function copyText() {
 
         await navigator.clipboard.writeText(output.value);
 
-        document.getElementById("text-status").textContent =
-            "Translation copied successfully!";
+        status.textContent = "Translation copied successfully!";
 
     } catch (error) {
 
-        document.getElementById("text-status").textContent =
-            "Unable to copy the translation.";
-
+        status.textContent = "Unable to copy the translation.";
     }
-
 }
 
 
@@ -476,65 +365,90 @@ async function copyText() {
 // SPEECH TRANSLATION - START RECORDING
 // =====================================
 
-async function startSpeechRecording() {
+function startSpeechRecording() {
 
-    if (!navigator.mediaDevices || !window.MediaRecorder) {
+    if (speechRecordingActive) return;
 
-        document.getElementById("speech-recording-status").textContent =
-            "Your browser does not support audio recording.";
+    const sourceLanguage = document.getElementById(
+        "speech-source-language"
+    ).value;
 
-        return;
-    }
+    const status = document.getElementById(
+        "speech-recording-status"
+    );
 
     try {
 
-        const stream = await navigator.mediaDevices.getUserMedia({
-            audio: true
-        });
+        speechTranscript = "";
 
-        speechAudioChunks = [];
-        recordedSpeechAudio = null;
+        document.getElementById("recognized-text").value = "";
+        document.getElementById("speech-translated-output").value = "";
 
-        speechRecorder = new MediaRecorder(stream);
+        speechRecognition = createRecognition(
+            sourceLanguage,
 
-        speechRecorder.ondataavailable = event => {
+            transcript => {
 
-            if (event.data.size > 0) {
-                speechAudioChunks.push(event.data);
-            }
+                speechTranscript +=
+                    (speechTranscript ? " " : "") + transcript;
 
-        };
+                document.getElementById("recognized-text").value =
+                    speechTranscript;
 
-        speechRecorder.onstop = () => {
+                status.textContent = "Listening...";
 
-            recordedSpeechAudio = new Blob(speechAudioChunks, {
-                type: speechRecorder.mimeType
-            });
+            },
 
-            stream.getTracks().forEach(track => track.stop());
+            () => {
 
-            document.getElementById("speech-recording-status").textContent =
-                "Recording completed. Click Recognize and Translate Speech.";
+                speechRecordingActive = false;
 
-        };
+                document.getElementById(
+                    "speech-start-recording"
+                ).disabled = false;
 
-        speechRecorder.start();
+                document.getElementById(
+                    "speech-stop-recording"
+                ).disabled = true;
 
-        document.getElementById("speech-start-recording").disabled = true;
-        document.getElementById("speech-stop-recording").disabled = false;
+                status.textContent = speechTranscript
+                    ? "Recording completed. Click Recognize and Translate Speech."
+                    : "No speech detected. Please try again.";
 
-        document.getElementById("speech-recording-status").textContent =
-            "Recording... Speak now.";
+                speechRecognition = null;
+            },
+
+            status
+        );
+
+        speechRecordingActive = true;
+
+        document.getElementById(
+            "speech-start-recording"
+        ).disabled = true;
+
+        document.getElementById(
+            "speech-stop-recording"
+        ).disabled = false;
+
+        status.textContent = "Listening... Speak now.";
+
+        speechRecognition.start();
 
     } catch (error) {
 
-        console.error("Speech Recording Error:", error);
+        speechRecordingActive = false;
 
-        document.getElementById("speech-recording-status").textContent =
-            "Microphone access denied or unavailable.";
+        status.textContent = error.message;
 
+        document.getElementById(
+            "speech-start-recording"
+        ).disabled = false;
+
+        document.getElementById(
+            "speech-stop-recording"
+        ).disabled = true;
     }
-
 }
 
 
@@ -544,15 +458,17 @@ async function startSpeechRecording() {
 
 function stopSpeechRecording() {
 
-    if (speechRecorder && speechRecorder.state !== "inactive") {
+    if (!speechRecognition || !speechRecordingActive) return;
 
-        speechRecorder.stop();
+    document.getElementById(
+        "speech-stop-recording"
+    ).disabled = true;
 
-        document.getElementById("speech-start-recording").disabled = false;
-        document.getElementById("speech-stop-recording").disabled = true;
+    document.getElementById(
+        "speech-recording-status"
+    ).textContent = "Processing your speech...";
 
-    }
-
+    speechRecognition.stop();
 }
 
 
@@ -570,10 +486,6 @@ async function translateSpeech() {
         "speech-target-language"
     ).value;
 
-    const audioFile = document.getElementById(
-        "speech-audio-file"
-    ).files[0];
-
     const status = document.getElementById("speech-status");
 
     const recognizedOutput = document.getElementById("recognized-text");
@@ -582,55 +494,39 @@ async function translateSpeech() {
         "speech-translated-output"
     );
 
-    if (!audioFile && !recordedSpeechAudio) {
+    const recognizedText = recognizedOutput.value.trim();
 
-        status.textContent = "Please record or upload an audio file.";
-
+    if (!recognizedText) {
+        status.textContent =
+            "Please record your speech first and click Stop Recording.";
         return;
     }
 
     if (sourceLanguage === targetLanguage) {
-
         status.textContent = "Please select two different languages.";
-
         return;
     }
 
-    status.textContent = "Recognizing speech and translating... Please wait.";
+    status.textContent = "Translating recognized speech... Please wait.";
 
-    recognizedOutput.value = "";
     translatedOutput.value = "";
 
     try {
 
-        const formData = new FormData();
+        const response = await fetch("/api/translate", {
 
-        if (audioFile) {
-
-            formData.append("audio", audioFile);
-
-        } else {
-
-            const extension = getAudioExtension(recordedSpeechAudio.type);
-
-            const recordedFile = new File(
-                [recordedSpeechAudio],
-                `recording.${extension}`,
-                {
-                    type: recordedSpeechAudio.type || "audio/webm"
-                }
-            );
-
-            formData.append("audio", recordedFile);
-
-        }
-
-        formData.append("source_language", sourceLanguage);
-        formData.append("target_language", targetLanguage);
-
-        const response = await fetch("/api/speech-translate", {
             method: "POST",
-            body: formData
+
+            headers: {
+                "Content-Type": "application/json"
+            },
+
+            body: JSON.stringify({
+                text: recognizedText,
+                source_language: sourceLanguage,
+                target_language: targetLanguage
+            })
+
         });
 
         const result = await response.json();
@@ -639,19 +535,16 @@ async function translateSpeech() {
             throw new Error(result.error || "Speech translation failed.");
         }
 
-        recognizedOutput.value = result.recognized_text || "";
         translatedOutput.value = result.translated_text || "";
 
-        status.textContent = "Speech translation completed successfully!";
+        status.textContent =
+            "Speech translation completed successfully!";
 
     } catch (error) {
 
         console.error("Speech Translation Error:", error);
-
         status.textContent = error.message;
-
     }
-
 }
 
 
@@ -668,7 +561,6 @@ function swapSpeechLanguages() {
 
     source.value = target.value;
     target.value = temp;
-
 }
 
 
@@ -678,19 +570,22 @@ function swapSpeechLanguages() {
 
 function clearSpeech() {
 
-    document.getElementById("speech-audio-file").value = "";
+    if (speechRecordingActive) {
+        stopSpeechRecording();
+    }
 
     document.getElementById("recognized-text").value = "";
 
-    document.getElementById("speech-translated-output").value = "";
+    document.getElementById(
+        "speech-translated-output"
+    ).value = "";
 
     document.getElementById("speech-status").textContent = "";
 
     document.getElementById("speech-recording-status").textContent =
         "Click Start Recording to record your voice.";
 
-    recordedSpeechAudio = null;
-
+    speechTranscript = "";
 }
 
 
@@ -707,9 +602,7 @@ async function copySpeechTranslation() {
     const status = document.getElementById("speech-status");
 
     if (!output.value.trim()) {
-
         status.textContent = "There is no translation to copy.";
-
         return;
     }
 
@@ -722,7 +615,5 @@ async function copySpeechTranslation() {
     } catch (error) {
 
         status.textContent = "Unable to copy the translation.";
-
     }
-
 }
