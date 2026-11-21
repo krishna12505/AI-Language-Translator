@@ -1,19 +1,27 @@
 
 from flask import Flask, render_template, request, jsonify
+from dotenv import load_dotenv
 import os
 
 from translator import translate_text
 
 
 # =====================================
-# 1. FLASK CONFIGURATION
+# 1. LOAD ENVIRONMENT VARIABLES
+# =====================================
+
+load_dotenv()
+
+
+# =====================================
+# 2. FLASK CONFIGURATION
 # =====================================
 
 app = Flask(__name__)
 
 
 # =====================================
-# 2. HOME PAGE
+# 3. HOME PAGE
 # =====================================
 
 @app.route("/")
@@ -22,7 +30,7 @@ def home():
 
 
 # =====================================
-# 3. TEXT TRANSLATION API
+# 4. TEXT TRANSLATION API
 # =====================================
 
 @app.route("/api/translate", methods=["POST"])
@@ -69,7 +77,7 @@ def translate():
 
 
 # =====================================
-# 4. RUN APPLICATION
+# 5. RUN APPLICATION
 # =====================================
 
 if __name__ == "__main__":

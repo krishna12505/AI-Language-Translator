@@ -1,17 +1,29 @@
 
-import requests
+import os
+from groq import Groq
 
 LANGUAGES = {
-    "english": "en", "en": "en",
-    "hindi": "hi", "hi": "hi",
-    "telugu": "te", "te": "te",
-    "tamil": "ta", "ta": "ta",
-    "french": "fr", "fr": "fr",
-    "german": "de", "de": "de",
-    "spanish": "es", "es": "es",
-    "japanese": "ja", "ja": "ja",
-    "chinese": "zh-CN", "zh": "zh-CN", "zh-cn": "zh-CN",
-    "arabic": "ar", "ar": "ar"
+    "english": "English",
+    "en": "English",
+    "hindi": "Hindi",
+    "hi": "Hindi",
+    "telugu": "Telugu",
+    "te": "Telugu",
+    "tamil": "Tamil",
+    "ta": "Tamil",
+    "french": "French",
+    "fr": "French",
+    "german": "German",
+    "de": "German",
+    "spanish": "Spanish",
+    "es": "Spanish",
+    "japanese": "Japanese",
+    "ja": "Japanese",
+    "chinese": "Chinese",
+    "zh": "Chinese",
+    "zh-cn": "Chinese",
+    "arabic": "Arabic",
+    "ar": "Arabic"
 }
 
 
@@ -25,50 +37,68 @@ def translate_text(text, source_language, target_language):
 
     if source in ("auto", "automatic", "detect"):
         raise ValueError(
-            "Automatic language detection is not supported by this API. "
             "Please select the source language."
         )
 
-    source_code = LANGUAGES.get(source)
-    target_code = LANGUAGES.get(target)
+    source_name = LANGUAGES.get(source)
+    target_name = LANGUAGES.get(target)
 
-    if not source_code:
-        raise ValueError(f"Unsupported source language: {source_language}")
+    if not source_name:
+        raise ValueError("Unsupported source language.")
 
-    if not target_code:
-        raise ValueError(f"Unsupported target language: {target_language}")
+    if not target_name:
+        raise ValueError("Unsupported target language.")
 
-    if source_code == target_code:
+    if source_name == target_name:
         return text
 
-    url = "https://api.mymemory.translated.net/get"
+    api_key = os.environ.get("GROQ_API_KEY")
 
-    try:
-        response = requests.get(
-            url,
-            params={
-                "q": text,
-                "langpair": f"{source_code}|{target_code}"
-            },
-            timeout=20
+    if not api_key:
+        raise RuntimeError(
+            "Groq API key is missing. Please configure GROQ_API_KEY."
         )
 
-        response.raise_for_status()
-        data = response.json()
+    try:
+        client = Groq(api_key=api_key)
 
-        if data.get("responseStatus") != 200:
-            raise RuntimeError(
-                data.get("responseDetails") or "Translation failed."
-            )
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-20b",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "You are a professional translator. "
+                        "Translate the user's text accurately into "
+                        f"{target_name}. The source language is "
+                        f"{source_name}. Preserve the original meaning, "
+                        "tone and formatting. Return only the translated "
+                        "text. Do not explain or add comments."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": text
+                }
+            ],
+            temperature=0.2,
+            max_completion_tokens=2048
+        )
 
-        result = data.get("responseData", {}).get("translatedText")
+        translated_text = (
+            response.choices[0].message.content.strip()
+        )
 
-        if not result:
-            raise RuntimeError("Translation service returned no result.")
+        if not translated_text:
+            raise RuntimeError("No translation was returned.")
 
-        return result
+        return translated_text
 
-    except requests.RequestException as error:
+    except ValueError:
+        raise
+
+    except Exception as error:
+        print("Groq translation error:", str(error))
         raise RuntimeError(
-            "Unable to connect to the translation service."
+            "Translation service failed. Please try again."
         ) from error
