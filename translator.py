@@ -1,7 +1,5 @@
 
-import torch
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
+import threading
 
 # =====================================
 # 1. MODEL CONFIGURATION
@@ -9,7 +7,12 @@ from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 MODEL_NAME = "facebook/nllb-200-distilled-600M"
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+DEVICE = None
+
+tokenizer = None
+model = None
+
+model_lock = threading.Lock()
 
 
 # =====================================
@@ -31,20 +34,48 @@ LANGUAGE_CODES = {
 
 
 # =====================================
-# 3. LOAD TRANSLATION MODEL
+# 3. LAZY LOAD TRANSLATION MODEL
 # =====================================
 
-print("Loading AI Translation Model...")
+def get_translation_model():
 
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    global tokenizer, model, DEVICE
 
-model = AutoModelForSeq2SeqLM.from_pretrained(MODEL_NAME)
+    if model is None:
 
-model.to(DEVICE)
+        with model_lock:
 
-model.eval()
+            # Check again after acquiring the lock
+            if model is None:
 
-print("AI Translation Model Loaded Successfully!")
+                import torch
+                from transformers import (
+                    AutoTokenizer,
+                    AutoModelForSeq2SeqLM
+                )
+
+                DEVICE = (
+                    "cuda" if torch.cuda.is_available() else "cpu"
+                )
+
+                print("Loading AI Translation Model...")
+
+                tokenizer = AutoTokenizer.from_pretrained(
+                    MODEL_NAME
+                )
+
+                model = AutoModelForSeq2SeqLM.from_pretrained(
+                    MODEL_NAME,
+                    torch_dtype=torch.float32,
+                    low_cpu_mem_usage=True
+                )
+
+                model.to(DEVICE)
+                model.eval()
+
+                print("AI Translation Model Loaded Successfully!")
+
+    return tokenizer, model, DEVICE
 
 
 # =====================================
@@ -70,18 +101,22 @@ def translate_text(text, source_language, target_language):
 
     try:
 
-        # Set source language.
+        import torch
+
+        tokenizer, model, device = get_translation_model()
+
+        # Set source language
         tokenizer.src_lang = source_code
 
-        # Convert text into model tokens.
+        # Convert text into tokens
         inputs = tokenizer(
             text.strip(),
             return_tensors="pt",
             truncation=True,
             max_length=512
-        ).to(DEVICE)
+        ).to(device)
 
-        # Generate translation.
+        # Generate translation
         with torch.inference_mode():
 
             generated_tokens = model.generate(
@@ -93,13 +128,16 @@ def translate_text(text, source_language, target_language):
                 num_beams=4
             )
 
-        # Convert generated tokens into readable text.
+        # Convert tokens into readable text
         translated_text = tokenizer.batch_decode(
             generated_tokens,
             skip_special_tokens=True
         )[0]
 
         return translated_text
+
+    except ValueError:
+        raise
 
     except Exception as error:
 
